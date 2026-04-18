@@ -1,1 +1,235 @@
-/home/claude/index-simple.html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Daily Briefing Widget</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f172a; color: #e2e8f0; padding: 16px; min-height: 100vh; }
+    
+    .container { background: #0f172a; }
+    
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid #334155; }
+    .date { margin: 0; font-size: 20px; font-weight: 600; color: #f1f5f9; }
+    .refresh-btn { background: transparent; border: 1px solid #475569; color: #94a3b8; border-radius: 6px; padding: 6px 10px; font-size: 16px; cursor: pointer; }
+    
+    .section { margin-bottom: 16px; background: #1e293b; border-radius: 10px; border: 1px solid #334155; overflow: hidden; }
+    .section-title { margin: 0; padding: 12px 14px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; background: #0f172a; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 8px; }
+    .icon { font-size: 16px; }
+    
+    .row { padding: 12px 14px; border-top: 1px solid #334155; display: flex; gap: 10px; align-items: flex-start; font-size: 13px; }
+    .time { color: #64748b; font-size: 12px; min-width: 60px; font-weight: 500; }
+    .label { color: #cbd5e1; flex: 1; }
+    
+    .badge { color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; white-space: nowrap; min-width: 70px; text-align: center; }
+    .task-info { flex: 1; }
+    .task-name { margin: 0 0 4px 0; color: #cbd5e1; font-size: 13px; font-weight: 500; }
+    .task-group { margin: 0; color: #64748b; font-size: 12px; }
+    
+    .shift-info { flex: 1; }
+    .shift-position { margin: 0 0 2px 0; color: #cbd5e1; font-weight: 500; }
+    .shift-time { margin: 0; color: #64748b; font-size: 12px; }
+    
+    .canvas-info { flex: 1; }
+    .canvas-title { margin: 0 0 4px 0; color: #cbd5e1; font-weight: 500; }
+    .canvas-course { margin: 0; color: #64748b; font-size: 12px; }
+    .missing-badge { display: inline-block; background: #ef4444; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 11px; font-weight: 600; margin-top: 4px; }
+    
+    .footer { text-align: center; padding-top: 16px; border-top: 1px solid #334155; margin-top: 16px; }
+    .footer-text { margin: 0; font-size: 12px; color: #64748b; }
+    
+    .setup-box { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 20px; margin-top: 40px; }
+    .setup-title { margin: 0 0 12px 0; font-size: 18px; font-weight: 600; color: #f1f5f9; }
+    .setup-text { margin: 0 0 16px 0; font-size: 14px; color: #cbd5e1; line-height: 1.5; }
+    input { width: 100%; padding: 10px 12px; margin-bottom: 12px; background: #0f172a; border: 1px solid #475569; border-radius: 6px; color: #e2e8f0; font-size: 13px; }
+    button { width: 100%; padding: 10px 12px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; margin-bottom: 12px; }
+    
+    .loading { text-align: center; padding-top: 60px; }
+    .spinner { width: 32px; height: 32px; border: 2px solid #334155; border-top: 2px solid #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { margin: 0; color: #94a3b8; font-size: 14px; }
+    
+    .error-box { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 20px; margin-top: 40px; text-align: center; }
+    .error-text { margin: 0 0 8px 0; color: #ef4444; font-weight: 600; font-size: 14px; }
+    .error-subtext { margin: 0 0 16px 0; color: #94a3b8; font-size: 13px; }
+    
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="setupScreen" class="setup-box">
+      <h2 class="setup-title">Daily Briefing Widget</h2>
+      <p class="setup-text">Paste your Apps Script web endpoint URL below:</p>
+      <input id="endpointInput" type="text" placeholder="https://script.google.com/macros/s/..." />
+      <button onclick="saveEndpoint()">Save & Load</button>
+    </div>
+
+    <div id="loadingScreen" class="hidden">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p class="loading-text">Loading your briefing...</p>
+      </div>
+    </div>
+
+    <div id="errorScreen" class="hidden">
+      <div class="error-box">
+        <p class="error-text" id="errorText"></p>
+        <p class="error-subtext" id="errorSubtext"></p>
+        <button onclick="showSetup()">Change endpoint</button>
+      </div>
+    </div>
+
+    <div id="widgetScreen" class="hidden">
+      <div class="header">
+        <h1 class="date" id="dateDisplay"></h1>
+        <button class="refresh-btn" onclick="refreshData()">↻</button>
+      </div>
+      <div id="widgetContent"></div>
+      <div class="footer">
+        <p class="footer-text" id="lastUpdated"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let endpoint = '';
+
+    function init() {
+      const params = new URLSearchParams(window.location.search);
+      const urlEndpoint = params.get('endpoint');
+      
+      if (urlEndpoint) {
+        endpoint = urlEndpoint;
+        localStorage.setItem('widgetEndpoint', urlEndpoint);
+        fetchData();
+      } else {
+        const saved = localStorage.getItem('widgetEndpoint');
+        if (saved) {
+          endpoint = saved;
+          fetchData();
+        } else {
+          showSetup();
+        }
+      }
+    }
+
+    function showSetup() {
+      document.getElementById('setupScreen').classList.remove('hidden');
+      document.getElementById('loadingScreen').classList.add('hidden');
+      document.getElementById('errorScreen').classList.add('hidden');
+      document.getElementById('widgetScreen').classList.add('hidden');
+    }
+
+    function saveEndpoint() {
+      const input = document.getElementById('endpointInput').value.trim();
+      if (input) {
+        endpoint = input;
+        localStorage.setItem('widgetEndpoint', input);
+        document.getElementById('setupScreen').classList.add('hidden');
+        fetchData();
+      }
+    }
+
+    function showLoading() {
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('loadingScreen').classList.remove('hidden');
+      document.getElementById('errorScreen').classList.add('hidden');
+      document.getElementById('widgetScreen').classList.add('hidden');
+    }
+
+    function showError(msg, subtext = '') {
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('loadingScreen').classList.add('hidden');
+      document.getElementById('errorScreen').classList.remove('hidden');
+      document.getElementById('widgetScreen').classList.add('hidden');
+      document.getElementById('errorText').textContent = msg;
+      document.getElementById('errorSubtext').textContent = subtext;
+    }
+
+    function showWidget(data) {
+      document.getElementById('setupScreen').classList.add('hidden');
+      document.getElementById('loadingScreen').classList.add('hidden');
+      document.getElementById('errorScreen').classList.add('hidden');
+      document.getElementById('widgetScreen').classList.remove('hidden');
+      
+      const date = new Date(data.date + 'T12:00:00');
+      document.getElementById('dateDisplay').textContent = date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+      document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      let html = '';
+      
+      if (data.calendar && data.calendar.length > 0) {
+        html += renderSection('Calendar', '📅', data.calendar.map((e, i) => 
+          `<div class="row"><span class="time">${e.time}</span><span class="label">${e.title}</span></div>`
+        ).join(''));
+      }
+      
+      if (data.monday && data.monday.length > 0) {
+        html += renderSection('Tasks', '✓', data.monday.map((t, i) => {
+          const color = getPriorityColor(t.priority);
+          return `<div class="row"><span class="badge" style="background:${color}">${t.priority || 'None'}</span><div class="task-info"><p class="task-name">${t.name}</p>${t.group ? '<p class="task-group">' + t.group + '</p>' : ''}</div></div>`;
+        }).join(''));
+      }
+      
+      if (data.pco && data.pco.length > 0) {
+        html += renderSection('Work', '🎵', data.pco.map((s, i) => 
+          `<div class="row"><div class="shift-info"><p class="shift-position">${s.position}</p>${s.time ? '<p class="shift-time">' + s.time + '</p>' : ''}</div></div>`
+        ).join(''));
+      }
+      
+      if (data.canvas && data.canvas.length > 0) {
+        html += renderSection('Canvas', '📚', data.canvas.map((item, i) => 
+          `<div class="row"><div class="canvas-info"><p class="canvas-title">${item.title}</p><p class="canvas-course">${item.course}</p>${item.missing ? '<span class="missing-badge">Missing</span>' : ''}</div></div>`
+        ).join(''));
+      }
+      
+      document.getElementById('widgetContent').innerHTML = html;
+    }
+
+    function renderSection(title, icon, content) {
+      return `<div class="section"><h3 class="section-title"><span class="icon">${icon}</span> ${title}</h3><div>${content}</div></div>`;
+    }
+
+    function getPriorityColor(priority) {
+      const lower = (priority || '').toLowerCase();
+      if (lower === 'critical') return '#ef4444';
+      if (lower === 'high' || lower === 'high priority') return '#f97316';
+      if (lower === 'medium' || lower === 'medium priority') return '#f59e0b';
+      if (lower === 'low' || lower === 'low priority') return '#22c55e';
+      return '#64748b';
+    }
+
+    function fetchData() {
+      if (!endpoint) {
+        showSetup();
+        return;
+      }
+      
+      showLoading();
+      
+      fetch(endpoint)
+        .then(res => res.json())
+        .then(json => {
+          if (json.error) {
+            if (json.waitingForUpdate) {
+              showError('Waiting for first 8am update...', 'Check back at 8am when your briefing runs.');
+            } else {
+              showError(json.error);
+            }
+          } else {
+            showWidget(json);
+          }
+        })
+        .catch(err => showError('Failed to fetch data', err.message));
+    }
+
+    function refreshData() {
+      fetchData();
+    }
+
+    window.onload = init;
+  </script>
+</body>
+</html>
