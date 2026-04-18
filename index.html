@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Daily Briefing</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background-color: #0f172a;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      padding: 16px;
+      min-height: 100vh;
+    }
+    .container { max-width: 100%; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #334155;
+    }
+    h1 { font-size: 20px; font-weight: 600; color: #f1f5f9; }
+    .refresh-btn {
+      background-color: transparent;
+      border: 1px solid #475569;
+      color: #94a3b8;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .section {
+      margin-bottom: 16px;
+      background-color: #1e293b;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      overflow: hidden;
+    }
+    .section-title {
+      margin: 0;
+      padding: 12px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      background-color: #0f172a;
+      border-bottom: 1px solid #334155;
+    }
+    .row {
+      padding: 12px 14px;
+      border-top: 1px solid #334155;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      font-size: 13px;
+    }
+    .row:first-child { border-top: none; }
+    .time { color: #64748b; font-size: 12px; min-width: 60px; font-weight: 500; }
+    .label { color: #cbd5e1; flex: 1; }
+    .error-box {
+      background-color: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 40px;
+      text-align: center;
+    }
+    .error-text { color: #ef4444; font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+    .loading { text-align: center; padding-top: 60px; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="loading">
+      <p>Loading your briefing...</p>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const endpoint = params.get('endpoint');
+
+    async function loadWidget() {
+      const app = document.getElementById('app');
+      
+      if (!endpoint) {
+        app.innerHTML = '<div class="error-box"><p class="error-text">No endpoint provided</p></div>';
+        return;
+      }
+
+      try {
+        const res = await fetch(endpoint);
+        const json = await res.json();
+
+        if (json.error) {
+          if (json.waitingForUpdate) {
+            app.innerHTML = '<div class="error-box"><p class="error-text">Waiting for first 8am update...</p><p style="color: #94a3b8; font-size: 13px;">Check back when your briefing runs.</p></div>';
+          } else {
+            app.innerHTML = `<div class="error-box"><p class="error-text">${json.error}</p></div>`;
+          }
+          return;
+        }
+
+        let html = `
+          <div class="header">
+            <h1>${formatDate(json.date)}</h1>
+            <button class="refresh-btn" onclick="location.reload()">↻</button>
+          </div>
+        `;
+
+        if (json.calendar && json.calendar.length > 0) {
+          html += `<div class="section"><div class="section-title">📅 Calendar</div>`;
+          json.calendar.forEach(event => {
+            html += `<div class="row"><span class="time">${event.time}</span><span class="label">${event.title}</span></div>`;
+          });
+          html += `</div>`;
+        }
+
+        if (json.monday && json.monday.length > 0) {
+          html += `<div class="section"><div class="section-title">✓ Tasks</div>`;
+          json.monday.forEach(task => {
+            html += `<div class="row"><div style="flex: 1;"><p style="margin: 0 0 4px 0; color: #cbd5e1; font-weight: 500;">${task.name}</p><p style="margin: 0; color: #64748b; font-size: 12px;">${task.group}</p></div></div>`;
+          });
+          html += `</div>`;
+        }
+
+        if (json.pco && json.pco.length > 0) {
+          html += `<div class="section"><div class="section-title">🎵 Work</div>`;
+          json.pco.forEach(shift => {
+            html += `<div class="row"><div style="flex: 1;"><p style="margin: 0 0 2px 0; color: #cbd5e1; font-weight: 500;">${shift.position}</p><p style="margin: 0; color: #64748b; font-size: 12px;">${shift.time}</p></div></div>`;
+          });
+          html += `</div>`;
+        }
+
+        if (json.canvas && json.canvas.length > 0) {
+          html += `<div class="section"><div class="section-title">📚 Canvas</div>`;
+          json.canvas.forEach(item => {
+            html += `<div class="row"><div style="flex: 1;"><p style="margin: 0 0 4px 0; color: #cbd5e1; font-weight: 500;">${item.title}</p><p style="margin: 0; color: #64748b; font-size: 12px;">${item.course}</p></div></div>`;
+          });
+          html += `</div>`;
+        }
+
+        app.innerHTML = html;
+      } catch (err) {
+        app.innerHTML = `<div class="error-box"><p class="error-text">Failed to load: ${err.message}</p></div>`;
+      }
+    }
+
+    function formatDate(dateStr) {
+      const date = new Date(dateStr + 'T12:00:00');
+      const options = { weekday: 'long', month: 'short', day: 'numeric' };
+      return date.toLocaleDateString('en-US', options);
+    }
+
+    loadWidget();
+  </script>
+</body>
+</html>
